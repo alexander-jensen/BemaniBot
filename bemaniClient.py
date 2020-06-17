@@ -1,3 +1,4 @@
+from discordToken import token
 import discord
 from discord.ext import commands
 import sqlite3
@@ -62,4 +63,4 @@ async def search(ctx,*arg):
 #Query conditions:
 #cursor.execute("SELECT * FROM songs WHERE title_name LIKE ?",("%"+query+"%",))
 #cursor.execute("SELECT * FROM songs WHERE title_yomigana LIKE ?",("%"+query+"%",))
-bot.run('NTk2NDkzNjU3NDI3ODA0MTgy.XufiYA.hvBaRtC76i4Cslwv70_J9aP7MAI')
+bot.run(token)
