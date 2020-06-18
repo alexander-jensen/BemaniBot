@@ -22,7 +22,7 @@ async def search(ctx,*arg):
     results = cursor.fetchall()
     songsFound = len(results)
     if songsFound == 1:
-        #Reopen db
+        #Reopen db and access details of one specific song
         #PLEASE PUT THIS INTO ANOTHER FILE WHEN THE TIME COMES
         with sqlite3.connect('sdvx.db') as db:
             db.row_factory = sqlite3.Row
@@ -43,22 +43,22 @@ async def search(ctx,*arg):
                 embed.add_field(name='BPM',value=song['bpm_min'],inline=True)
             else:
                 embed.add_field(name='BPM',value=song['bpm_min']+song['bpm_max'],inline=True)
+            embed.add_field(name='Categories',value=song['genre'],inline = False)
         return await ctx.send(embed=embed)
     elif songsFound > 2:
         await ctx.send(f'{len(results)} song(s) found')
         db.close()
+        #TODO: Allow the user to see the list through reaction commands
         if songsFound > 20:
             return await ctx.send('Too many songs, please use a different search.')
         return await ctx.send('\n'.join(x['title_name'] for x in results))
-        
     elif not songsFound:
-        await ctx.send('searching harder...')
         results = cursor.execute("SELECT title_name FROM songs WHERE title_yomigana LIKE ?",("%"+query+"%",)).fetchall()
-        songsFound = len(results)
-        if not songsFound:
+        if len(results) == 0:
             db.close()
             return await ctx.send("I've got nothing.")
     #return await ctx.send(embed=embed)
+
 
 #Query conditions:
 #cursor.execute("SELECT * FROM songs WHERE title_name LIKE ?",("%"+query+"%",))
