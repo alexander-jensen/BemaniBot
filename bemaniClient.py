@@ -7,6 +7,8 @@ from soundvoltex import SoundVoltexCommands
 bot = commands.Bot(command_prefix='*')
 #Main command for querying the sdvx database
 #I think I will create optional arguments with either * or ^ or # (maybe !)?
+#Should use on_reaction_add
+#And add_reaction()
 @bot.command()
 async def refresh(ctx):
     bot.remove_cog('SoundVoltexCommands')
@@ -16,9 +18,7 @@ async def refresh(ctx):
 
 @bot.event
 async def on_ready():
+    #Load cogs for each respective game
     bot.add_cog(SoundVoltexCommands(bot))
     return
-#Query conditions:
-#cursor.execute("SELECT * FROM songs WHERE title_name LIKE ?",("%"+query+"%",))
-#cursor.execute("SELECT * FROM songs WHERE title_yomigana LIKE ?",("%"+query+"%",))
 bot.run(token)
