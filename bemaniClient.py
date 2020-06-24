@@ -15,7 +15,6 @@ async def refresh(ctx):
     bot.add_cog(SoundVoltexCommands(bot))
     return await ctx.send("refreshed")
 
-
 @bot.event
 async def on_ready():
     #Load cogs for each respective game
