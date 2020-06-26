@@ -24,6 +24,15 @@ reToDifficulty = {
         'h':'heavenly',
         'v':'vivid'
         }
+class SongList():
+    def __init__(self,query,index,messageId):
+        #Store the query that generates the songlist
+        self.query = query
+        #Store the index the songlist takes at
+        self.index = index
+        #Store the message id on discord's end so we can identify the reaction
+        self.messageId = messageId
+    def getSongList
 class SoundVoltexCommands(commands.Cog):
     def __init__(self,bot):
         self.bot = bot
@@ -55,7 +64,6 @@ class SoundVoltexCommands(commands.Cog):
 
     @commands.command()
     async def searchdiff(self,ctx,*arg):
-        #TODO
         query = ' '.join(arg)
         searchParameters = {}
         if len(arg) == 0:
@@ -135,7 +143,10 @@ class SoundVoltexCommands(commands.Cog):
         embed.add_field(name='Categories',value=song['genre'],inline = False)
         embed.set_footer(text=song['distribution_date']+ ' | ' + song['version'],icon_url=urls[song['version']])
         #Send and attach 1-5 emotes depending on how many difficulties there are
-        return await ctx.send(embed=embed)
+        await ctx.send(embed=embed)
+
+
+        return
     async def displayMultipleSongs(self,songs,ctx):
         #Assumes that songs are called by songs and artist tuples, with song title being in 0 and artist in 1
         #Assumes songs is also has > 1 item
@@ -162,6 +173,10 @@ class SoundVoltexCommands(commands.Cog):
         #Add reactions to control left and right
         return
 
+    @commands.command()
+    async def on_reaction_add(reaction,user):
+        await print(user)
+        await print('This on_reaction_add command works?')
     @commands.command()
     async def random(self,ctx,*arg):
         if len(arg) == 0:
