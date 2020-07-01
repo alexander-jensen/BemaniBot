@@ -1,23 +1,86 @@
 from discordToken import token
 import discord
-from discord.ext import commands
 import sqlite3
-from soundvoltex import SoundVoltexCommands
 
-bot = commands.Bot(command_prefix='*')
-#Main command for querying the sdvx database
-#I think I will create optional arguments with either * or ^ or # (maybe !)?
-#Should use on_reaction_add
-#And add_reaction()
-@bot.command()
-async def refresh(ctx):
-    bot.remove_cog('SoundVoltexCommands')
-    bot.add_cog(SoundVoltexCommands(bot))
-    return await ctx.send("refreshed")
+import soundvoltex
 
-@bot.event
-async def on_ready():
-    #Load cogs for each respective game
-    bot.add_cog(SoundVoltexCommands(bot))
+import config
+
+
+
+client = discord.Client()
+commands = {
+    'search':soundvoltex.search,
+    'songsearch':soundvoltex.search,
+    'ss':soundvoltex.search,
+    'searchdiff':soundvoltex.searchdiff,
+    'sd':soundvoltex.searchdiff,
+    'random':soundvoltex.random,
+    }
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+    request = message.content
+    #Main control flow for commands
+    if request.startswith('*'):
+        #Just take it out, I don't want to have to deal with the asterisk
+        request = request[1:]
+        #Get the first word 
+        command = request.split(' ')[0]
+        print(command,'requested')
+        if command in commands:
+            await commands[command](message)
     return
-bot.run(token)
+
+@client.event
+async def on_raw_reaction_add(payload):
+    channel = client.get_channel(payload.channel_id)
+    message = await channel.fetch_message(payload.message_id)
+    #Ignore reaction if created by the bot
+    print(payload.user_id)
+    print(client.user.id)
+    if payload.user_id == client.user.id: 
+        print('passing through reaction')
+        return
+    #Check what type of embed it is: either a song search or single song
+    print(message.embeds[0].title)
+    if message.embeds[0].title == '**Song Search**':
+        print('Song Search found')
+        #Fetch the channel so we can fetch the message object
+        #Check if server has a song list dictionary (which it should)
+        print(config.songListDictionary)
+        if payload.guild_id in config.songListDictionary:
+            for songList in config.songListDictionary[payload.guild_id]:
+                if songList.messageId == payload.message_id:
+                    #Finally, we find what reaction was passed
+                    print(payload.emoji)
+                    #Call the song to be updated
+                    if str(payload.emoji) == '➡️':
+                        print('attempting to increment page')
+                        await songList.incrementPage(1)
+                        await songList.updateSongPage()
+                        return
+                    elif str(payload.emoji) == '⬅️':
+                        print('attempting to increment page')
+                        await songList.decrementPage(1)
+                        await songList.updateSongPage()
+                        return
+
+
+    #Assume that the embed is just a song then
+    else:
+        print('Reaction received on single song')
+    
+    
+
+
+@client.event
+async def on_ready():
+    print("Logged in as",client.user)
+    print('Currently a part of these servers:')
+    for guild in client.guilds:
+         print(guild,'id:',guild.id)
+    print('Total guild total of',str(len(client.guilds)))
+    
+client.run(token)
