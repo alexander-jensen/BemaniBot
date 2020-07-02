@@ -61,7 +61,7 @@ class SongList():
         if self.currentPage - pages <= 1:
             self.currentPage = 1
         else:
-            self.currentPage += pages
+            self.currentPage -= pages
         return
     async def createSongEmbed(self):
         with sqlite3.connect('sdvx.db') as db:
