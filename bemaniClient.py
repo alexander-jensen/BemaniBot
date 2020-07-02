@@ -1,14 +1,11 @@
 from discordToken import token
 import discord
 import sqlite3
-
 import soundvoltex
-
 import config
 
-
-
 client = discord.Client()
+
 commands = {
     'search':soundvoltex.search,
     'songsearch':soundvoltex.search,
@@ -17,24 +14,13 @@ commands = {
     'sd':soundvoltex.searchdiff,
     'random':soundvoltex.random,
     }
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-    request = message.content
-    #Main control flow for commands
-    if request.startswith('*'):
-        #Just take it out, I don't want to have to deal with the asterisk
-        request = request[1:]
-        #Get the first word 
-        command = request.split(' ')[0]
-        print(command,'requested')
-        if command in commands:
-            await commands[command](message)
-    return
 
-@client.event
-async def on_raw_reaction_add(payload):
+pageChangeDictionary = {
+        '➡️':1,
+        '⬅️':-1
+        }
+
+async def handleReactions(payload):
     channel = client.get_channel(payload.channel_id)
     message = await channel.fetch_message(payload.message_id)
     #Ignore reaction if created by the bot
@@ -56,24 +42,36 @@ async def on_raw_reaction_add(payload):
                     #Finally, we find what reaction was passed
                     print(payload.emoji)
                     #Call the song to be updated
-                    if str(payload.emoji) == '➡️':
-                        print('attempting to increment page')
-                        await songList.incrementPage(1)
+                    if str(payload.emoji) in pageChangeDictionary:
+                        await songList.changePage(pageChangeDictionary[str(payload.emoji)])
                         await songList.updateSongPage()
-                        return
-                    elif str(payload.emoji) == '⬅️':
-                        print('attempting to increment page')
-                        await songList.decrementPage(1)
-                        await songList.updateSongPage()
-                        return
-
-
+                    return
     #Assume that the embed is just a song then
     else:
         print('Reaction received on single song')
-    
-    
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+    request = message.content
+    #Main control flow for commands
+    if request.startswith('*'):
+        #Just take it out, I don't want to have to deal with the asterisk
+        request = request[1:]
+        #Get the first word 
+        command = request.split(' ')[0]
+        print(command,'requested')
+        if command in commands:
+            await commands[command](message)
+    return
 
+@client.event
+async def on_raw_reaction_add(payload):
+    await handleReactions(payload)
+    
+@client.event
+async def on_raw_reaction_remove(payload):
+    await handleReactions(payload)
 
 @client.event
 async def on_ready():
