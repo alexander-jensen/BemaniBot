@@ -35,9 +35,9 @@ async def handleReactions(payload):
         print('Song Search found')
         #Fetch the channel so we can fetch the message object
         #Check if server has a song list dictionary (which it should)
-        print(config.songListDictionary)
-        if payload.guild_id in config.songListDictionary:
-            for songList in config.songListDictionary[payload.guild_id]:
+        print(config.serverSongQueue)
+        if payload.guild_id in config.serverSongQueue:
+            for songList in config.serverSongQueue[payload.guild_id]:
                 if songList.messageId == payload.message_id:
                     #Finally, we find what reaction was passed
                     print(payload.emoji)
@@ -48,7 +48,9 @@ async def handleReactions(payload):
                     return
     #Assume that the embed is just a song then
     else:
+        print(str(payload.emoji))
         print('Reaction received on single song')
+        await channel.send(str(payload.emoji) + ' received')
 @client.event
 async def on_message(message):
     if message.author == client.user:

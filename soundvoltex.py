@@ -23,9 +23,21 @@ reToDifficulty = {
         'h':'heavenly',
         'v':'vivid'
         }
-class SongList():
+
+difficultyLevelToEmoji = {
+        'novice':'🇳',
+        'advanced':'🇦',
+        'exhaust':'🇪',
+        'infinite':'🇮',
+        'maximum':'🇲',
+        'gravity':'🇬',
+        'heavenly':'🇭',
+        'vivid':'🇻'
+}
+
+class SongSearch():
     """A class that generates a song list for the user to look through."""
-    def __init__(self,channel,totalSongs,query,parameters):
+    def __init__(self,totalSongs,query,parameters):
         #Store the query that generates the songlist
         self.query = query
         #Store the message id on discord's end so we can identify the reaction
@@ -40,13 +52,11 @@ class SongList():
         #Create the message object for the class
         self.message = None
         self.messageId = None
-        self.channel = channel
-        self.channelId = channel.id
     def __str__(self):
-        string = 'SongList ID: '+str(self.messageId)+'CHANNEL' + str(self.channelId)
+        string = 'SongSearch ID: '+str(self.messageId)
         return string
     def __repr__(self):
-        string = 'SongList ID: '+str(self.messageId)+'CHANNEL' + str(self.channelId)
+        string = 'SongSearch ID: '+str(self.messageId)
         return string
     async def getQuery(self):
         return self.query
@@ -61,8 +71,8 @@ class SongList():
             return
         else:
         #Handle page decrease
-            if self.currentPage + pages >= self.totalPages:
-                self.currentPage = self.totalPages
+            if self.currentPage + pages < 1:
+                self.currentPage = 1
             else:
                 self.currentPage += pages
             return
@@ -84,14 +94,15 @@ class SongList():
         embed.add_field(name=str(self.totalSongs)+' songs found',value=embedBody,inline=True)
         embed.set_footer(text=f'Page {str(self.currentPage)}/{str(self.totalPages)}')
         return embed
-    async def createSongMessage(self):
+    async def createSongMessage(self,channel):
         assert self.message == None
         embed = await self.createSongEmbed()
-        self.message = await self.channel.send(embed=embed)
+        self.message = await channel.send(embed=embed)
         self.messageId = self.message.id
         #Attach the reactions to the thing
-        await self.message.add_reaction('⬅️')
-        await self.message.add_reaction('➡️')
+        if self.totalPages != 1:
+            await self.message.add_reaction('⬅️')
+            await self.message.add_reaction('➡️')
         return
     async def updateSongPage(self):
         #Update the message with the next page.
@@ -108,6 +119,8 @@ class SingleSong():
         self.message = None
         #Fetch what difficulties this song has
         self.info = 'general'
+        #Default infinite version for dummy
+        self.infiniteVersion = 0
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
             difficulties = cursor.execute(
@@ -116,14 +129,25 @@ class SingleSong():
                     (self.songId,)).fetchall()
             print(difficulties)
             self.difficulties = [x[0] for x in difficulties] 
+            #Check if there's an infinite, search the infinite version for the song
+            if 'infinite' in self.difficulties:
+                infiniteVersion = cursor.execute(
+                    """SELECT infinite_version FROM songs WHERE id = ?"""
+                    ,(self.songId,)
+                    ).fetchone()[0]
+                self.difficulties[self.difficulties.index('infinite')] = infiniteVersion
+               
+        
         print(self.difficulties)
     async def createSongMessage(self,channel):
         """Creates the message and allows the song to have a message to handle itself"""
         assert self.message == None
         embed = await self.generateEmbed()
         self.message = await channel.send(embed=embed)
-        #Add The Rections for each section of songs
-        await self.message.add_reaction(
+        await self.message.add_reaction('🏘️')
+        for difficulty in self.difficulties:
+            await self.message.add_reaction(difficultyLevelToEmoji[difficulty])
+        return
     async def generateEmbed(self):
         db = sqlite3.connect('sdvx.db')
         db.row_factory = sqlite3.Row
@@ -146,9 +170,9 @@ class SingleSong():
             bpmString = str(song['bpm_min']) 
             if song['bpm_min'] != song['bpm_max']:
                 bpmString += ' - '+str(song['bpm_max'])
-            embed.add_field(name='BPM',value=bpmString + ' BPM',inline=False)
+            embed.add_field(name='BPM',value=bpmString + ' BPM',inline=True)
             #Show categories728323422492557518CHANNEL590611437785710624
-            embed.add_field(name='Categories',value=song['genre'],inline = False)
+            embed.add_field(name='Categories',value=song['genre'],inline =False)
             embed.set_footer(text=song['distribution_date'] + ' | ' + song['version'],
                     icon_url=urls[song['version']])
         else:
@@ -159,7 +183,7 @@ class SingleSong():
                 effector FROM difficulties WHERE id = ? AND difficultyLevel = ?""",(self.songId,self.info)).fetchone()
             #Create the embed
             embed = discord.Embed(title = '**' + self.songTitle + '**',
-                    description = difficultyInfo['difficultyLevel'] + ' ' + difficultyNumber,
+                    description = difficultyInfo['difficultyLevel'] + ' ' + difficultyInfo['difficultyNumber'],
                     color=0xfc8403)
             embed.add_field(name='Illustrator',value=difficultyInfo['illustrator'])
             embed.add_field(name='Effector',value=difficultyInfo['effector'])
@@ -172,6 +196,7 @@ class SingleSong():
         if mode == 'general' or mode in self.difficulties:
             #Change the mode
             self.mode = mode
+            await self.generateEmbed()
         else:
             print('Invalid mode, returning')
             return
@@ -214,28 +239,28 @@ async def getSongInfo(title,titleId,message):
     song = SingleSong(title,titleId)
     await song.createSongMessage(message.channel)
     #Load the song into the dictionary
-    if message.guild.id in config.songListDictionary:
+    if message.guild.id in config.serverSongQueue:
         #Insert the song into the dictionary
-        config.songListDictionary[message.guild.id].append(song)
+        config.serverSongQueue[message.guild.id].append(song)
     else:
         #Create the song list
-        config.songListDictionary[message.guild.id] = [song]
+        config.serverSongQueue[message.guild.id] = [song]
     print('Single Song created with id',song.message.id)
     return
 async def displayMultipleSongs(songs,message,query,parameters):
     """Given a list of songs, and the message, send an embed which allows users
     to go through the list through reaction commands."""
     #Create a music songList
-    songlist = SongList(message.channel,len(songs),query,parameters)
-    await songlist.createSongMessage()
+    songlist = SongSearch(len(songs),query,parameters)
+    await songlist.createSongMessage(message.channel)
     print(songlist.message.id)
     #Check if there is a dictionary for the current server 
-    if message.guild.id in config.songListDictionary:
+    if message.guild.id in config.serverSongQueue:
         #Insert the song into the dictionary
-        config.songListDictionary[message.guild.id].append(songlist)
+        config.serverSongQueue[message.guild.id].append(songlist)
     else:
         #Create the song list
-        config.songListDictionary[message.guild.id] = [songlist]
+        config.serverSongQueue[message.guild.id] = [songlist]
     print("Message sent, has id",songlist.messageId)
     return
 async def search(message):
