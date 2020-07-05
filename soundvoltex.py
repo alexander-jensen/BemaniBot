@@ -3,37 +3,6 @@ import math
 import asyncio
 import config
 
-url2 = "https://cdn.vox-cdn.com/thumbor/bqASZI3uKDGxAP3mTAX1TiGuuSg=/0x0:800x800/1200x0/filters:focal(0x0:800x800)/cdn.vox-cdn.com/uploads/chorus_asset/file/10838085/4head.jpg"
-
-urls = {
-        'SOUND VOLTEX BOOTH':'https://i.imgur.com/iuQDSqu.jpg',
-        'SOUND VOLTEX II -infinite infection-':'https://i.imgur.com/qfQr5Yc.jpg',
-        'SOUND VOLTEX III GRAVITY WARS':'https://i.imgur.com/rJfdDKU.png',
-        'SOUND VOLTEX IV HEAVENLY HAVEN':'https://i.imgur.com/wz0SIvo.png',
-        'SOUND VOLTEX VIVID WAVE':'https://i.imgur.com/poqcuPt.png'
-        }
-
-reToDifficulty = {
-        'n':'novice',
-        'a':'advanced',
-        'e':'exhaust',
-        'i':'infinite',
-        'm':'maximum',
-        'g':'gravity',
-        'h':'heavenly',
-        'v':'vivid'
-        }
-
-difficultyLevelToEmoji = {
-        'novice':'🇳',
-        'advanced':'🇦',
-        'exhaust':'🇪',
-        'infinite':'🇮',
-        'maximum':'🇲',
-        'gravity':'🇬',
-        'heavenly':'🇭',
-        'vivid':'🇻'
-}
 
 class SongSearch():
     """A class that generates a song list for the user to look through."""
@@ -52,6 +21,7 @@ class SongSearch():
         #Create the message object for the class
         self.message = None
         self.messageId = None
+        self.channelId = None
     def __str__(self):
         string = 'SongSearch ID: '+str(self.messageId)
         return string
@@ -68,14 +38,13 @@ class SongSearch():
                 self.currentPage = self.totalPages
             else:
                 self.currentPage += pages
-            return
         else:
         #Handle page decrease
             if self.currentPage + pages < 1:
                 self.currentPage = 1
             else:
                 self.currentPage += pages
-            return
+        await self.updateSongPage()
     async def createSongEmbed(self):
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
@@ -99,6 +68,7 @@ class SongSearch():
         embed = await self.createSongEmbed()
         self.message = await channel.send(embed=embed)
         self.messageId = self.message.id
+        self.channelId = channel.id
         #Attach the reactions to the thing
         if self.totalPages != 1:
             await self.message.add_reaction('⬅️')
@@ -117,6 +87,7 @@ class SingleSong():
         self.songTitle = songTitle
         self.songId = songId
         self.message = None
+        self.messageId = None
         #Fetch what difficulties this song has
         self.info = 'general'
         #Default infinite version for dummy
@@ -136,36 +107,38 @@ class SingleSong():
                     ,(self.songId,)
                     ).fetchone()[0]
                 self.difficulties[self.difficulties.index('infinite')] = infiniteVersion
-               
-        
+            additionalInfo = cursor.execute('SELECT artist_name,distribution_date,version FROM songs WHERE id = ?',(self.songId,)).fetchone()
+            self.songArtist,self.uploadDate,self.version = additionalInfo
         print(self.difficulties)
     async def createSongMessage(self,channel):
         """Creates the message and allows the song to have a message to handle itself"""
         assert self.message == None
         embed = await self.generateEmbed()
         self.message = await channel.send(embed=embed)
+        self.messageId = self.message.id
+        self.channelId = channel.id
         await self.message.add_reaction('🏘️')
         for difficulty in self.difficulties:
-            await self.message.add_reaction(difficultyLevelToEmoji[difficulty])
+            await self.message.add_reaction(config.difficultyLevelToEmoji[difficulty])
         return
     async def generateEmbed(self):
         db = sqlite3.connect('sdvx.db')
         db.row_factory = sqlite3.Row
         cursor = db.cursor()
+        print('Creating embed for',self.info)
         if self.info == 'general':
-            song = cursor.execute("""SELECT title_name,
-                    artist_name,
+            song = cursor.execute("""SELECT 
                     bpm_min,
                     bpm_max,
                     distribution_date,
                     genre,
                     version FROM songs WHERE title_name = ?""",(self.songTitle,)).fetchone()
             #Create the embed 
-            embed=discord.Embed(title='**' + song['title_name'] + '**',
-                   description='\t'*(len(song['title_name'])//4) + song['artist_name'],
+            embed=discord.Embed(title='**' + self.songTitle + '**',
+                   description='\t'*(len(self.songTitle)//4) + self.songArtist,
                    color=0xffa500)
             embed.set_author(name='\t'*8)
-            embed.set_thumbnail(url=url2)
+            embed.set_thumbnail(url=config.url2)
             #Show both bpms if needed
             bpmString = str(song['bpm_min']) 
             if song['bpm_min'] != song['bpm_max']:
@@ -173,8 +146,6 @@ class SingleSong():
             embed.add_field(name='BPM',value=bpmString + ' BPM',inline=True)
             #Show categories728323422492557518CHANNEL590611437785710624
             embed.add_field(name='Categories',value=song['genre'],inline =False)
-            embed.set_footer(text=song['distribution_date'] + ' | ' + song['version'],
-                    icon_url=urls[song['version']])
         else:
             assert self.info in self.difficulties
             difficultyInfo = cursor.execute("""SELECT difficultyLevel,
@@ -183,23 +154,32 @@ class SingleSong():
                 effector FROM difficulties WHERE id = ? AND difficultyLevel = ?""",(self.songId,self.info)).fetchone()
             #Create the embed
             embed = discord.Embed(title = '**' + self.songTitle + '**',
-                    description = difficultyInfo['difficultyLevel'] + ' ' + difficultyInfo['difficultyNumber'],
+                    description = self.songArtist,
                     color=0xfc8403)
+            embed.set_image(url=config.url2)
+            embed.add_field(name='Level',value=difficultyInfo['difficultyLevel'].title() + ' ' + str(difficultyInfo['difficultyNumber']))
             embed.add_field(name='Illustrator',value=difficultyInfo['illustrator'])
             embed.add_field(name='Effector',value=difficultyInfo['effector'])
-            #Assume that the current mode is a difficulty
+            #Assume that the current info is a difficulty
         #Close the database and return
+        embed.set_footer(text=self.uploadDate + ' | ' + self.version,
+                icon_url=config.urls[self.version])
         db.close()
         return embed
-    async def changeMode(self,mode):
+    async def changeInfo(self,info):
         """Change the mode to either general information or a specific difficulty"""
-        if mode == 'general' or mode in self.difficulties:
+        print('attempting to change mode to',info)
+        if info == 'general' or info in self.difficulties:
             #Change the mode
-            self.mode = mode
-            await self.generateEmbed()
+            self.info = info
+            await self.updateSongPage()
         else:
             print('Invalid mode, returning')
             return
+    async def updateSongPage(self):
+        embed = await self.generateEmbed()
+        await self.message.edit(embed=embed)
+        return
 
             
 

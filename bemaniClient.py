@@ -15,42 +15,31 @@ commands = {
     'random':soundvoltex.random,
     }
 
-pageChangeDictionary = {
-        '➡️':1,
-        '⬅️':-1
-        }
 
 async def handleReactions(payload):
     channel = client.get_channel(payload.channel_id)
     message = await channel.fetch_message(payload.message_id)
     #Ignore reaction if created by the bot
-    print(payload.user_id)
-    print(client.user.id)
     if payload.user_id == client.user.id: 
         print('passing through reaction')
         return
+    emoji = str(payload.emoji)
     #Check what type of embed it is: either a song search or single song
-    print(message.embeds[0].title)
-    if message.embeds[0].title == '**Song Search**':
-        print('Song Search found')
-        #Fetch the channel so we can fetch the message object
-        #Check if server has a song list dictionary (which it should)
-        print(config.serverSongQueue)
-        if payload.guild_id in config.serverSongQueue:
-            for songList in config.serverSongQueue[payload.guild_id]:
-                if songList.messageId == payload.message_id:
-                    #Finally, we find what reaction was passed
-                    print(payload.emoji)
-                    #Call the song to be updated
-                    if str(payload.emoji) in pageChangeDictionary:
-                        await songList.changePage(pageChangeDictionary[str(payload.emoji)])
-                        await songList.updateSongPage()
-                    return
+    if payload.guild_id in config.serverSongQueue:
+        for songObject in config.serverSongQueue[payload.guild_id]:
+            if songObject.messageId == payload.message_id:
+                #Check what type of object, most likely a single song
+                if isinstance(songObject,soundvoltex.SingleSong) and emoji in config.emojiToDifficultyLevel:
+                    await songObject.changeInfo(config.emojiToDifficultyLevel[emoji])
+                elif isinstance(songObject,soundvoltex.SongSearch):
+                    if emoji in config.pageChangeDictionary:
+                        await songObject.changePage(config.pageChangeDictionary[emoji])
     #Assume that the embed is just a song then
     else:
         print(str(payload.emoji))
-        print('Reaction received on single song')
+        print('Invalid object to react to')
         await channel.send(str(payload.emoji) + ' received')
+    return
 @client.event
 async def on_message(message):
     if message.author == client.user:
