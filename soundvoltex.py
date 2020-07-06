@@ -312,14 +312,14 @@ async def searchdiff(message):
         #Perform search on database joining the two
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
-            query = """SELECT title_name,artist_name FROM songs 
+            query = """SELECT title_name,artist_name,id FROM songs 
                 JOIN difficulties ON songs.id = difficulties.id
                 WHERE """ + whereStatements
             cursor.execute(query)
             results = cursor.fetchall()
             print(results)
         if len(results) == 1:
-            await getSongInfo(results[0][0],message)
+            await getSongInfo(results[0][0],results[0][2],message)
         elif len(results) > 1:
             await displayMultipleSongs(results,message,query,tuple())
         else:
@@ -328,23 +328,23 @@ async def searchdiff(message):
 async def random(message):
     """Return a random song in the database, or return a random song which falls
     within the difficulty number specified within the command"""
-    arg = sanitize(message.content)
+    arg = await sanitize(message.content)
+    print('random command used')
     print(arg)
     if len(arg) == 0:
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
-            cursor.execute("SELECT title_name FROM songs ORDER BY random() LIMIT 1")
-            title = cursor.fetchone()[0]
-        await getSongInfo(title,message)
+            cursor.execute("SELECT title_name,songs.id FROM songs ORDER BY random() LIMIT 1")
+            query = cursor.fetchone()
+        await getSongInfo(query[0],query[1],message)
         return
-    arg = arg[0]
     print(arg)
     if arg.isdigit() and int(arg) >= 1 and int(arg) <= 20:
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
-            cursor.execute("SELECT title_name FROM songs JOIN difficulties ON songs.id = difficulties.id WHERE difficultyNumber = ? AND illustrator != 'dummy' ORDER BY random() LIMIT 1",(int(arg),))
-            title = cursor.fetchone()[0]
-        return await getSongInfo(title,message)
+            cursor.execute("SELECT title_name,songs.id FROM songs JOIN difficulties ON songs.id = difficulties.id WHERE difficultyNumber = ? AND illustrator != 'dummy' ORDER BY random() LIMIT 1",(int(arg),))
+            query = cursor.fetchone()
+        return await getSongInfo(query[0],query[1],message)
     elif len(arg.split('-')) == 2:
         arg = arg.split('-')
         print(arg)
@@ -364,9 +364,9 @@ async def random(message):
         print(arg)
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
-            cursor.execute("SELECT title_name FROM songs JOIN difficulties ON songs.id = difficulties.id WHERE difficultyNumber >= ? AND difficultyNumber <= ? AND illustrator != 'dummy' ORDER BY random() LIMIT 1",(arg[0],arg[1]))
-            title = cursor.fetchone()[0]
-        return await getSongInfo(title,message)
+            cursor.execute("SELECT title_name,songs.id FROM songs JOIN difficulties ON songs.id = difficulties.id WHERE difficultyNumber >= ? AND difficultyNumber <= ? AND illustrator != 'dummy' ORDER BY random() LIMIT 1",(arg[0],arg[1]))
+            query = cursor.fetchone()
+        return await getSongInfo(query[0],query[1],message)
     else:
         return await message.channel.send('Usage: *random <1-20> or *random lowerLevel-UpperLevel')
 
