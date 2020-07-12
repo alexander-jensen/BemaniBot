@@ -88,6 +88,7 @@ class SingleSong():
         self.songId = songId
         self.message = None
         self.messageId = None
+        self.channelId = None
         #Fetch what difficulties this song has
         self.info = 'general'
         #Default infinite version for dummy
@@ -162,8 +163,8 @@ class SingleSong():
             embed.add_field(name='Effector',value=difficultyInfo['effector'])
             #Assume that the current info is a difficulty
         #Close the database and return
-        embed.set_footer(text=self.uploadDate + ' | ' + self.version,
-                icon_url=config.urls[self.version])
+        embed.set_footer(text = self.uploadDate + ' | ' + self.version,
+                icon_url = config.urls[self.version])
         db.close()
         return embed
     async def changeInfo(self,info):
@@ -221,7 +222,7 @@ async def getSongInfo(title,titleId,message):
     #Load the song into the dictionary
     if message.guild.id in config.serverSongQueue:
         #Insert the song into the dictionary
-        config.serverSongQueue[message.guild.id].append(song)
+        config.serverSongQueue[message.guild.id].insert(0,song)
     else:
         #Create the song list
         config.serverSongQueue[message.guild.id] = [song]
@@ -287,7 +288,7 @@ async def searchdiff(message):
     difficultyLevelExists = isinstance(difficultyLevel,re.Match)
     difficultyNumberExists = isinstance(difficultyNumber,re.Match)
     if difficultyLevelExists:
-        searchParameters['difficultyLevel'] = reToDifficulty[difficultyLevel.group()[0]]
+        searchParameters['difficultyLevel'] = config.reToDifficulty[difficultyLevel.group()[0]]
     if difficultyNumberExists:
         difficultyNumber = int(difficultyNumber.group())
         if difficultyNumber >= 1 and difficultyNumber <= 20:
@@ -312,7 +313,7 @@ async def searchdiff(message):
         #Perform search on database joining the two
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
-            query = """SELECT title_name,artist_name,id FROM songs 
+            query = """SELECT title_name,artist_name,songs.id FROM songs 
                 JOIN difficulties ON songs.id = difficulties.id
                 WHERE """ + whereStatements
             cursor.execute(query)

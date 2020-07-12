@@ -54,6 +54,16 @@ async def on_message(message):
         print(command,'requested')
         if command in commands:
             await commands[command](message)
+    else:
+        #Handle page navigation or turn a songlist into a singlesong
+        content = message.content
+        #Check the number first because there's no point going farther 
+        number = config.numberParser.search(content)
+
+        #See if the user is requesting a page
+        pageNumberRequested = isinstance(config.pageParser.match(content),re.Match)
+        #See what number they request with the page (or the song number)
+
     return
 
 @client.event

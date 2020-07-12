@@ -1,4 +1,9 @@
+import re
 serverSongQueue = {}
+
+pageParser = re.compile(r'pa?ge?.?')
+
+numberParser = re.compile(r'\d+')
 
 url2 = "https://cdn.vox-cdn.com/thumbor/bqASZI3uKDGxAP3mTAX1TiGuuSg=/0x0:800x800/1200x0/filters:focal(0x0:800x800)/cdn.vox-cdn.com/uploads/chorus_asset/file/10838085/4head.jpg"
 
