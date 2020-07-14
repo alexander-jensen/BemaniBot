@@ -6,7 +6,7 @@ import config
 
 class SongSearch():
     """A class that generates a song list for the user to look through."""
-    def __init__(self,totalSongs,query,parameters):
+    def __init__(self,totalSongs,query,parameters,jump='general'):
         #Store the query that generates the songlist
         self.query = query
         #Store the message id on discord's end so we can identify the reaction
@@ -22,6 +22,8 @@ class SongSearch():
         self.message = None
         self.messageId = None
         self.channelId = None
+        #The jump required for converting a song search into a single song directly instead of directing towards general
+        self.jump = jump
     def __str__(self):
         string = 'SongSearch ID: '+str(self.messageId)
         return string
@@ -45,6 +47,10 @@ class SongSearch():
             else:
                 self.currentPage += pages
         await self.updateSongPage()
+    async def setPage(self,page):
+        if page <= self.totalPages and page > 0:
+            self.currentPage = page
+            await self.updateSongPage()
     async def createSongEmbed(self):
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
@@ -79,18 +85,36 @@ class SongSearch():
         embed = await self.createSongEmbed()
         await self.message.edit(embed=embed)
         return
-
+    async def convertToSingleSong(self,number):
+        print('Number',number,'requested')
+        print('SongSearch has total of',self.totalSongs,'pages')
+        if number > self.totalSongs:
+            print('Number is higher than total, returning')
+            return self
+        with sqlite3.connect('sdvx.db') as db:
+            cursor = db.cursor()
+            print(self.query)
+            print(self.parameters)
+            print(number)
+            cursor.execute(self.query + ' LIMIT 1 OFFSET ?',self.parameters + (number-1,))
+            song = cursor.fetchone()
+            print(song)
+            print(song[0])
+            print(song[2])
+            song = SingleSong(song[0],song[2],self.message,self.messageId,self.channelId,self.jump)
+            await song.createSongMessage(self.channelId)
+            return song
 
 class SingleSong():
     #An object used to handle single song searches. 
-    def __init__(self,songTitle,songId):
+    def __init__(self,songTitle,songId,message=None,messageId=None,channelId=None,info='general'):
         self.songTitle = songTitle
         self.songId = songId
-        self.message = None
-        self.messageId = None
-        self.channelId = None
+        self.message = message
+        self.messageId = messageId
+        self.channelId = channelId
         #Fetch what difficulties this song has
-        self.info = 'general'
+        self.info = info
         #Default infinite version for dummy
         self.infiniteVersion = 0
         with sqlite3.connect('sdvx.db') as db:
@@ -110,14 +134,36 @@ class SingleSong():
                 self.difficulties[self.difficulties.index('infinite')] = infiniteVersion
             additionalInfo = cursor.execute('SELECT artist_name,distribution_date,version FROM songs WHERE id = ?',(self.songId,)).fetchone()
             self.songArtist,self.uploadDate,self.version = additionalInfo
+            #Convert the difficultyNumber into difficultyLevel
+            print(self.info)
+            print(type(self.info))
+            
+            if isinstance(self.info,int):
+                cursor.execute("""SELECT difficultyLevel FROM songs JOIN difficulties ON songs.id = difficulties.id WHERE songs.id = ? AND difficultyNumber = ?""",(self.songId,self.info))
+                print('converting info to difficulty')
+                self.info = cursor.fetchone()[0]
+                if self.info == 'infinite':
+                    self.info = infiniteVersion
         print(self.difficulties)
+    def __str__(self):
+        string = 'SingleSong ID: '+str(self.messageId)
+        return string
+    def __repr__(self):
+        string = 'SingleSong ID: '+str(self.messageId)
+        return string
     async def createSongMessage(self,channel):
         """Creates the message and allows the song to have a message to handle itself"""
-        assert self.message == None
         embed = await self.generateEmbed()
-        self.message = await channel.send(embed=embed)
-        self.messageId = self.message.id
-        self.channelId = channel.id
+        if self.message == None:
+            self.message = await channel.send(embed=embed)
+            self.messageId = self.message.id
+            self.channelId = channel.id
+        else:
+            try:
+                await self.message.clear_reactions()
+                await self.message.edit(embed=embed)
+            except discord.Forbidden:
+                await self.message.channel.send('Clearing Reactions Failed. Please give me a role that can manage messages please!')
         await self.message.add_reaction('🏘️')
         for difficulty in self.difficulties:
             await self.message.add_reaction(config.difficultyLevelToEmoji[difficulty])
@@ -127,6 +173,7 @@ class SingleSong():
         db.row_factory = sqlite3.Row
         cursor = db.cursor()
         print('Creating embed for',self.info)
+        print(self.songTitle)
         if self.info == 'general':
             song = cursor.execute("""SELECT 
                     bpm_min,
@@ -137,7 +184,7 @@ class SingleSong():
             #Create the embed 
             embed=discord.Embed(title='**' + self.songTitle + '**',
                    description='\t'*(len(self.songTitle)//4) + self.songArtist,
-                   color=0xffa500)
+                   color=config.difficultyToColor[self.info])
             embed.set_author(name='\t'*8)
             embed.set_thumbnail(url=config.url2)
             #Show both bpms if needed
@@ -148,6 +195,7 @@ class SingleSong():
             #Show categories728323422492557518CHANNEL590611437785710624
             embed.add_field(name='Categories',value=song['genre'],inline =False)
         else:
+            print(self.info)
             assert self.info in self.difficulties
             difficultyInfo = cursor.execute("""SELECT difficultyLevel,
                 difficultyNumber,
@@ -156,8 +204,8 @@ class SingleSong():
             #Create the embed
             embed = discord.Embed(title = '**' + self.songTitle + '**',
                     description = self.songArtist,
-                    color=0xfc8403)
-            embed.set_image(url=config.url2)
+                    color=config.difficultyToColor[self.info])
+            embed.set_thumbnail(url=config.url2)
             embed.add_field(name='Level',value=difficultyInfo['difficultyLevel'].title() + ' ' + str(difficultyInfo['difficultyNumber']))
             embed.add_field(name='Illustrator',value=difficultyInfo['illustrator'])
             embed.add_field(name='Effector',value=difficultyInfo['effector'])
@@ -168,15 +216,11 @@ class SingleSong():
         db.close()
         return embed
     async def changeInfo(self,info):
-        """Change the mode to either general information or a specific difficulty"""
-        print('attempting to change mode to',info)
-        if info == 'general' or info in self.difficulties:
-            #Change the mode
-            self.info = info
-            await self.updateSongPage()
-        else:
-            print('Invalid mode, returning')
-            return
+        """Change the mode to either general information or a specific difficulty,
+        This function is fairly voltile if changed incorrectly."""
+        #Change the mode
+        self.info = info
+        await self.updateSongPage()
     async def updateSongPage(self):
         embed = await self.generateEmbed()
         await self.message.edit(embed=embed)
@@ -226,15 +270,15 @@ async def getSongInfo(title,titleId,message):
     else:
         #Create the song list
         config.serverSongQueue[message.guild.id] = [song]
-    print('Single Song created with id',song.message.id)
+    #print('Single Song created with id',song.message.id)
     return
-async def displayMultipleSongs(songs,message,query,parameters):
+async def displayMultipleSongs(songs,message,query,parameters,jump=None):
     """Given a list of songs, and the message, send an embed which allows users
     to go through the list through reaction commands."""
     #Create a music songList
-    songlist = SongSearch(len(songs),query,parameters)
+    songlist = SongSearch(len(songs),query,parameters,jump)
     await songlist.createSongMessage(message.channel)
-    print(songlist.message.id)
+    #print(songlist.message.id)
     #Check if there is a dictionary for the current server 
     if message.guild.id in config.serverSongQueue:
         #Insert the song into the dictionary
@@ -242,7 +286,7 @@ async def displayMultipleSongs(songs,message,query,parameters):
     else:
         #Create the song list
         config.serverSongQueue[message.guild.id] = [songlist]
-    print("Message sent, has id",songlist.messageId)
+    #print("Message sent, has id",songlist.messageId)
     return
 async def search(message):
     """
@@ -287,15 +331,20 @@ async def searchdiff(message):
     #Check if the correct arguments were given
     difficultyLevelExists = isinstance(difficultyLevel,re.Match)
     difficultyNumberExists = isinstance(difficultyNumber,re.Match)
-    if difficultyLevelExists:
-        searchParameters['difficultyLevel'] = config.reToDifficulty[difficultyLevel.group()[0]]
+    #Catch if one of the three common levels are requested, present nothing for these
+    if not difficultyNumberExists and difficultyLevel.group()[0] in ['n','a','e']:
+        return await message.channel.send('Difficulty number is required for this difficulty level.')
     if difficultyNumberExists:
         difficultyNumber = int(difficultyNumber.group())
         if difficultyNumber >= 1 and difficultyNumber <= 20:
             #await ctx.send('You requested difficulty number ' + str(difficultyNumber))
             searchParameters['difficultyNumber'] = difficultyNumber
+            jump = difficultyNumber
         else:
             return await message.channel.send('Invalid difficulty number: '+ str(difficultyNumber))
+    if difficultyLevelExists:
+        searchParameters['difficultyLevel'] = config.reToDifficulty[difficultyLevel.group()[0]]
+        jump = searchParameters['difficultyLevel']
     if len(searchParameters.keys()) == 0:
         return await message.channel.send('Invalid parameters')
     else:
@@ -309,7 +358,7 @@ async def searchdiff(message):
                 whereStatements += 'infinite_version' + " = '" + searchParameters[key] + "'"
             else:
                 whereStatements += key + " = '" + str(searchParameters[key]) + "'"
-        print(whereStatements)
+        #print(whereStatements)
         #Perform search on database joining the two
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
@@ -318,11 +367,11 @@ async def searchdiff(message):
                 WHERE """ + whereStatements
             cursor.execute(query)
             results = cursor.fetchall()
-            print(results)
+            #print(results)
         if len(results) == 1:
             await getSongInfo(results[0][0],results[0][2],message)
         elif len(results) > 1:
-            await displayMultipleSongs(results,message,query,tuple())
+            await displayMultipleSongs(results,message,query,tuple(),jump)
         else:
             await message.channel.send('No songs found with those parameters')
         return

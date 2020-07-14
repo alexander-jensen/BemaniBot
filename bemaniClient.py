@@ -3,6 +3,7 @@ import discord
 import sqlite3
 import soundvoltex
 import config
+import re
 
 client = discord.Client()
 
@@ -20,10 +21,13 @@ async def handleReactions(payload):
     channel = client.get_channel(payload.channel_id)
     message = await channel.fetch_message(payload.message_id)
     #Ignore reaction if created by the bot
+    print(payload.user_id)
+    print(client.user.id)
     if payload.user_id == client.user.id: 
-        print('passing through reaction')
+        #print('passing through reaction')
         return
     emoji = str(payload.emoji)
+    print(emoji)
     #Check what type of embed it is: either a song search or single song
     if payload.guild_id in config.serverSongQueue:
         for songObject in config.serverSongQueue[payload.guild_id]:
@@ -31,13 +35,12 @@ async def handleReactions(payload):
                 #Check what type of object, most likely a single song
                 if isinstance(songObject,soundvoltex.SingleSong) and emoji in config.emojiToDifficultyLevel:
                     await songObject.changeInfo(config.emojiToDifficultyLevel[emoji])
-                elif isinstance(songObject,soundvoltex.SongSearch):
-                    if emoji in config.pageChangeDictionary:
-                        await songObject.changePage(config.pageChangeDictionary[emoji])
+                elif isinstance(songObject,soundvoltex.SongSearch) and emoji in config.pageChangeDictionary:
+                    await songObject.changePage(config.pageChangeDictionary[emoji])
     #Assume that the embed is just a song then
     else:
         print(str(payload.emoji))
-        print('Invalid object to react to')
+        #print('Invalid object to react to')
         await channel.send(str(payload.emoji) + ' received')
     return
 @client.event
@@ -59,11 +62,22 @@ async def on_message(message):
         content = message.content
         #Check the number first because there's no point going farther 
         number = config.numberParser.search(content)
-
-        #See if the user is requesting a page
         pageNumberRequested = isinstance(config.pageParser.match(content),re.Match)
-        #See what number they request with the page (or the song number)
+        if isinstance(number,re.Match):
+            number = int(number.group())
+            #See if the user is requesting a page
+            for index,songObject in enumerate(config.serverSongQueue[message.guild.id]):
+                if isinstance(songObject,soundvoltex.SongSearch): 
+                    if pageNumberRequested:
+                        await songObject.setPage(number)
+                    else:
+                        #Transform the songsearch into a single song
+                        print('attempting to convert',config.serverSongQueue[message.guild.id][index],'to single song')
+                        print(config.serverSongQueue)
+                        config.serverSongQueue[message.guild.id][index] = await songObject.convertToSingleSong(number)
+                        print(config.serverSongQueue)
 
+            #See what number they request with the page (or the song number)
     return
 
 @client.event
