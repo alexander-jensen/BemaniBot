@@ -272,7 +272,7 @@ async def getSongInfo(title,titleId,message):
         config.serverSongQueue[message.guild.id] = [song]
     #print('Single Song created with id',song.message.id)
     return
-async def displayMultipleSongs(songs,message,query,parameters,jump=None):
+async def displayMultipleSongs(songs,message,query,parameters,jump='general'):
     """Given a list of songs, and the message, send an embed which allows users
     to go through the list through reaction commands."""
     #Create a music songList
@@ -362,7 +362,7 @@ async def searchdiff(message):
         #Perform search on database joining the two
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
-            query = """SELECT title_name,artist_name,songs.id FROM songs 
+            query = """SELECT DISTINCT title_name,artist_name,songs.id FROM songs 
                 JOIN difficulties ON songs.id = difficulties.id
                 WHERE """ + whereStatements
             cursor.execute(query)

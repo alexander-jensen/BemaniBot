@@ -19,7 +19,7 @@ commands = {
 
 async def handleReactions(payload):
     channel = client.get_channel(payload.channel_id)
-    message = await channel.fetch_message(payload.message_id)
+    #message = await channel.fetch_message(payload.message_id)
     #Ignore reaction if created by the bot
     print(payload.user_id)
     print(client.user.id)
