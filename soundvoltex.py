@@ -22,6 +22,7 @@ class SongSearch():
         self.message = None
         self.messageId = None
         self.channelId = None
+        self.guildId = None
         #The jump required for converting a song search into a single song directly instead of directing towards general
         self.jump = jump
     def __str__(self):
@@ -75,6 +76,7 @@ class SongSearch():
         self.message = await channel.send(embed=embed)
         self.messageId = self.message.id
         self.channelId = channel.id
+        self.guildId = self.message.guild.id
         #Attach the reactions to the thing
         if self.totalPages != 1:
             await self.message.add_reaction('⬅️')
@@ -101,18 +103,31 @@ class SongSearch():
             print(song)
             print(song[0])
             print(song[2])
-            song = SingleSong(song[0],song[2],self.message,self.messageId,self.channelId,self.jump)
+            song = SingleSong(song[0],song[2],self.message,self.jump)
             await song.createSongMessage(self.channelId)
+            print(song)
             return song
+
+    async def startCountdown(self,time):
+        print(config.serverSongQueue[self.guildId])
+        await asyncio.sleep(time)
+        try:
+            config.serverSongQueue[self.guildId][self.channelId].remove(self)
+        except ValueError:
+            pass
+        print(config.serverSongQueue[self.guildId])
 
 class SingleSong():
     #An object used to handle single song searches. 
-    def __init__(self,songTitle,songId,message=None,messageId=None,channelId=None,info='general'):
+    def __init__(self,songTitle,songId,message=None,info='general'):
         self.songTitle = songTitle
         self.songId = songId
         self.message = message
-        self.messageId = messageId
-        self.channelId = channelId
+        if message:
+            self.guildId = message.guild.id
+            self.messageId = self.message.id
+            self.channelId = self.message.channel.id
+            print('guild id set as',self.guildId)
         #Fetch what difficulties this song has
         self.info = info
         #Default infinite version for dummy
@@ -158,6 +173,7 @@ class SingleSong():
             self.message = await channel.send(embed=embed)
             self.messageId = self.message.id
             self.channelId = channel.id
+            self.guildId = self.message.guild.id
         else:
             try:
                 await self.message.clear_reactions()
@@ -196,19 +212,23 @@ class SingleSong():
             embed.add_field(name='Categories',value=song['genre'],inline =False)
         else:
             print(self.info)
+            print(self.difficulties)
             assert self.info in self.difficulties
+            difficultyLevel = 'infinite' if self.info in ['gravity','heavenly','vivid'] else self.info
             difficultyInfo = cursor.execute("""SELECT difficultyLevel,
                 difficultyNumber,
                 illustrator,
-                effector FROM difficulties WHERE id = ? AND difficultyLevel = ?""",(self.songId,self.info)).fetchone()
+                effector FROM difficulties WHERE id = ? AND difficultyLevel = ?""",(self.songId,difficultyLevel)).fetchone()
+            print(difficultyInfo)
             #Create the embed
+            print(self.info)
             embed = discord.Embed(title = '**' + self.songTitle + '**',
                     description = self.songArtist,
                     color=config.difficultyToColor[self.info])
             embed.set_thumbnail(url=config.url2)
-            embed.add_field(name='Level',value=difficultyInfo['difficultyLevel'].title() + ' ' + str(difficultyInfo['difficultyNumber']))
-            embed.add_field(name='Illustrator',value=difficultyInfo['illustrator'])
-            embed.add_field(name='Effector',value=difficultyInfo['effector'])
+            embed.add_field(name='Level',value=self.info.title() + ' ' + str(difficultyInfo['difficultyNumber']),inline=False)
+            embed.add_field(name='Illustrator',value=difficultyInfo['illustrator'],inline=True)
+            embed.add_field(name='Effector',value=difficultyInfo['effector'],inline=True)
             #Assume that the current info is a difficulty
         #Close the database and return
         embed.set_footer(text = self.uploadDate + ' | ' + self.version,
@@ -225,7 +245,14 @@ class SingleSong():
         embed = await self.generateEmbed()
         await self.message.edit(embed=embed)
         return
-
+    async def startCountdown(self,time):
+        print(config.serverSongQueue[self.guildId])
+        await asyncio.sleep(time)
+        try:
+            config.serverSongQueue[self.guildId][self.channelId].remove(self)
+        except:
+            pass
+        print(config.serverSongQueue[self.guildId])
             
 
 
@@ -249,6 +276,17 @@ async def sanitize(commandString):
     commandString = " ".join(commandString)
     return commandString
 
+async def loadIntoSongQueue(message,songObject):
+    channelId = message.channel.id
+    guildId = message.guild.id
+    print(config.serverSongQueue)
+    if guildId not in config.serverSongQueue:  
+        config.serverSongQueue[guildId] = {}
+    if channelId not in config.serverSongQueue[guildId]:
+        config.serverSongQueue[guildId][channelId] = []
+    config.serverSongQueue[guildId][channelId].append(songObject)
+    print(config.serverSongQueue)
+    await songObject.startCountdown(10)
 async def getSongInfo(title,titleId,message):
     """
     A function helper for search, random, and searchdiff, provided they only find one
@@ -264,28 +302,15 @@ async def getSongInfo(title,titleId,message):
     song = SingleSong(title,titleId)
     await song.createSongMessage(message.channel)
     #Load the song into the dictionary
-    if message.guild.id in config.serverSongQueue:
-        #Insert the song into the dictionary
-        config.serverSongQueue[message.guild.id].insert(0,song)
-    else:
-        #Create the song list
-        config.serverSongQueue[message.guild.id] = [song]
-    #print('Single Song created with id',song.message.id)
+    await loadIntoSongQueue(message,song)
     return
 async def displayMultipleSongs(songs,message,query,parameters,jump='general'):
     """Given a list of songs, and the message, send an embed which allows users
     to go through the list through reaction commands."""
     #Create a music songList
-    songlist = SongSearch(len(songs),query,parameters,jump)
-    await songlist.createSongMessage(message.channel)
-    #print(songlist.message.id)
-    #Check if there is a dictionary for the current server 
-    if message.guild.id in config.serverSongQueue:
-        #Insert the song into the dictionary
-        config.serverSongQueue[message.guild.id].append(songlist)
-    else:
-        #Create the song list
-        config.serverSongQueue[message.guild.id] = [songlist]
+    songList = SongSearch(len(songs),query,parameters,jump)
+    await songList.createSongMessage(message.channel)
+    await loadIntoSongQueue(message,songList)
     #print("Message sent, has id",songlist.messageId)
     return
 async def search(message):
@@ -331,9 +356,8 @@ async def searchdiff(message):
     #Check if the correct arguments were given
     difficultyLevelExists = isinstance(difficultyLevel,re.Match)
     difficultyNumberExists = isinstance(difficultyNumber,re.Match)
-    #Catch if one of the three common levels are requested, present nothing for these
-    if not difficultyNumberExists and difficultyLevel.group()[0] in ['n','a','e']:
-        return await message.channel.send('Difficulty number is required for this difficulty level.')
+    if not difficultyLevelExists and not difficultyNumberExists:
+        return await message.channel.send('Usage: *searchdiff <difficultyType and/or difficultyNumber>')
     if difficultyNumberExists:
         difficultyNumber = int(difficultyNumber.group())
         if difficultyNumber >= 1 and difficultyNumber <= 20:
@@ -342,7 +366,10 @@ async def searchdiff(message):
             jump = difficultyNumber
         else:
             return await message.channel.send('Invalid difficulty number: '+ str(difficultyNumber))
+    #Catch if one of the three common levels are requested, present nothing for these
     if difficultyLevelExists:
+        if 'difficultyNumber' in searchParameters and difficultyLevel.group()[0] in ['n','a','e']:
+            return await message.channel.send('Difficulty number is required for this difficulty level.')
         searchParameters['difficultyLevel'] = config.reToDifficulty[difficultyLevel.group()[0]]
         jump = searchParameters['difficultyLevel']
     if len(searchParameters.keys()) == 0:
