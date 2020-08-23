@@ -31,6 +31,8 @@ class SongSearch():
     def __repr__(self):
         string = 'SongSearch ID: '+str(self.messageId)
         return string
+    def __len__(self):
+        return self.totalPages*10
     async def getQuery(self):
         return self.query
     async def changePage(self,pages):
@@ -88,24 +90,24 @@ class SongSearch():
         await self.message.edit(embed=embed)
         return
     async def convertToSingleSong(self,number):
-        print('Number',number,'requested')
-        print('SongSearch has total of',self.totalSongs,'pages')
+        #print('Number',number,'requested')
+        #print('SongSearch has total of',self.totalSongs,'pages')
         if number > self.totalSongs:
-            print('Number is higher than total, returning')
+            #print('Number is higher than total, returning')
             return self
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
-            print(self.query)
-            print(self.parameters)
-            print(number)
+            #print(self.query)
+            #print(self.parameters)
+            #print(number)
             cursor.execute(self.query + ' LIMIT 1 OFFSET ?',self.parameters + (number-1,))
             song = cursor.fetchone()
-            print(song)
-            print(song[0])
-            print(song[2])
+            #print(song)
+            #print(song[0])
+            #print(song[2])
             song = SingleSong(song[0],song[2],self.message,self.jump)
             await song.createSongMessage(self.channelId)
-            print(song)
+            #print(song)
             return song
 
     async def startCountdown(self,time):
@@ -127,7 +129,7 @@ class SingleSong():
             self.guildId = message.guild.id
             self.messageId = self.message.id
             self.channelId = self.message.channel.id
-            print('guild id set as',self.guildId)
+            #print('guild id set as',self.guildId)
         #Fetch what difficulties this song has
         self.info = info
         #Default infinite version for dummy
@@ -138,7 +140,7 @@ class SingleSong():
                     """SELECT difficultyLevel FROM difficulties 
                     WHERE id = ? AND difficultyNumber != 0""",
                     (self.songId,)).fetchall()
-            print(difficulties)
+            #print(difficulties)
             self.difficulties = [x[0] for x in difficulties] 
             #Check if there's an infinite, search the infinite version for the song
             if 'infinite' in self.difficulties:
@@ -150,22 +152,24 @@ class SingleSong():
             additionalInfo = cursor.execute('SELECT artist_name,distribution_date,version FROM songs WHERE id = ?',(self.songId,)).fetchone()
             self.songArtist,self.uploadDate,self.version = additionalInfo
             #Convert the difficultyNumber into difficultyLevel
-            print(self.info)
-            print(type(self.info))
+            #print(self.info)
+            #print(type(self.info))
             
             if isinstance(self.info,int):
                 cursor.execute("""SELECT difficultyLevel FROM songs JOIN difficulties ON songs.id = difficulties.id WHERE songs.id = ? AND difficultyNumber = ?""",(self.songId,self.info))
-                print('converting info to difficulty')
+                #print('converting info to difficulty')
                 self.info = cursor.fetchone()[0]
                 if self.info == 'infinite':
                     self.info = infiniteVersion
-        print(self.difficulties)
+        #print(self.difficulties)
     def __str__(self):
         string = 'SingleSong ID: '+str(self.messageId)
         return string
     def __repr__(self):
         string = 'SingleSong ID: '+str(self.messageId)
         return string
+    def __len__(self):
+        return 10*len(self.difficulties)
     async def createSongMessage(self,channel):
         """Creates the message and allows the song to have a message to handle itself"""
         embed = await self.generateEmbed()
@@ -188,21 +192,37 @@ class SingleSong():
         db = sqlite3.connect('sdvx.db')
         db.row_factory = sqlite3.Row
         cursor = db.cursor()
-        print('Creating embed for',self.info)
-        print(self.songTitle)
+        #print('Creating embed for',self.info)
+        #print(self.songTitle)
         if self.info == 'general':
+            #Select the highest placing jacket art?
+            #If doesn't exist, use the current one
             song = cursor.execute("""SELECT 
                     bpm_min,
                     bpm_max,
                     distribution_date,
                     genre,
-                    version FROM songs WHERE title_name = ?""",(self.songTitle,)).fetchone()
+                    noviceJacketURL,
+                    exhaustJacketURL,
+                    advancedJacketURL,
+                    infiniteJacketURL,
+                    maximumJacketURL,
+                    version FROM songs JOIN jacketImages ON songs.id = jacketImages.id
+                    WHERE title_name = ?""",(self.songTitle,)).fetchone()
+            #print(song.keys())
+            url = 'https://i.imgur.com/PXu2ARI.png'
+            for table in ['maximumJacketURL','infiniteJacketURL','exhaustJacketURL','advancedJacketURL','noviceJacketURL']:
+                #print(table)
+                if song[table] != None:
+                    url = 'https://i.imgur.com/' +  song[table] + '.png'
+                    break
+                
             #Create the embed 
             embed=discord.Embed(title='**' + self.songTitle + '**',
                    description='\t'*(len(self.songTitle)//4) + self.songArtist,
                    color=config.difficultyToColor[self.info])
             embed.set_author(name='\t'*8)
-            embed.set_thumbnail(url=config.url2)
+            embed.set_thumbnail(url=url)
             #Show both bpms if needed
             bpmString = str(song['bpm_min']) 
             if song['bpm_min'] != song['bpm_max']:
@@ -211,21 +231,30 @@ class SingleSong():
             #Show categories728323422492557518CHANNEL590611437785710624
             embed.add_field(name='Categories',value=song['genre'],inline =False)
         else:
-            print(self.info)
-            print(self.difficulties)
+            #print(self.info)
+            #print(self.difficulties)
             assert self.info in self.difficulties
             difficultyLevel = 'infinite' if self.info in ['gravity','heavenly','vivid'] else self.info
-            difficultyInfo = cursor.execute("""SELECT difficultyLevel,
+            difficultyInfo = cursor.execute(f"""SELECT difficultyLevel,
                 difficultyNumber,
                 illustrator,
-                effector FROM difficulties WHERE id = ? AND difficultyLevel = ?""",(self.songId,difficultyLevel)).fetchone()
-            print(difficultyInfo)
+                effector,noviceJacketURL,{difficultyLevel}JacketURL 
+                FROM difficulties JOIN jacketImages ON difficulties.id = jacketImages.id 
+                WHERE difficulties.id = ? AND difficultyLevel = ?""",(self.songId,difficultyLevel)).fetchone()
+            jacketQuery = difficultyLevel + 'JacketURL'
+            url = 'https://i.imgur.com/'
+            if difficultyInfo[jacketQuery]:
+                url += difficultyInfo[jacketQuery]
+            else:
+                url += difficultyInfo['noviceJacketURL']
+            url += '.png'
+            #print(difficultyInfo)
             #Create the embed
-            print(self.info)
+            #print(self.info)
             embed = discord.Embed(title = '**' + self.songTitle + '**',
                     description = self.songArtist,
                     color=config.difficultyToColor[self.info])
-            embed.set_thumbnail(url=config.url2)
+            embed.set_thumbnail(url=url)
             embed.add_field(name='Level',value=self.info.title() + ' ' + str(difficultyInfo['difficultyNumber']),inline=False)
             embed.add_field(name='Illustrator',value=difficultyInfo['illustrator'],inline=True)
             embed.add_field(name='Effector',value=difficultyInfo['effector'],inline=True)
@@ -246,13 +275,13 @@ class SingleSong():
         await self.message.edit(embed=embed)
         return
     async def startCountdown(self,time):
-        print(config.serverSongQueue[self.guildId])
+        #print(config.serverSongQueue[self.guildId])
         await asyncio.sleep(time)
         try:
             config.serverSongQueue[self.guildId][self.channelId].remove(self)
         except:
             pass
-        print(config.serverSongQueue[self.guildId])
+        #print(config.serverSongQueue[self.guildId])
             
 
 
@@ -279,14 +308,14 @@ async def sanitize(commandString):
 async def loadIntoSongQueue(message,songObject):
     channelId = message.channel.id
     guildId = message.guild.id
-    print(config.serverSongQueue)
+    #print(config.serverSongQueue)
     if guildId not in config.serverSongQueue:  
         config.serverSongQueue[guildId] = {}
     if channelId not in config.serverSongQueue[guildId]:
         config.serverSongQueue[guildId][channelId] = []
     config.serverSongQueue[guildId][channelId].append(songObject)
-    print(config.serverSongQueue)
-    await songObject.startCountdown(10)
+    #print(config.serverSongQueue)
+    await songObject.startCountdown(len(songObject))
 async def getSongInfo(title,titleId,message):
     """
     A function helper for search, random, and searchdiff, provided they only find one
@@ -311,7 +340,7 @@ async def displayMultipleSongs(songs,message,query,parameters,jump='general'):
     songList = SongSearch(len(songs),query,parameters,jump)
     await songList.createSongMessage(message.channel)
     await loadIntoSongQueue(message,songList)
-    #print("Message sent, has id",songlist.messageId)
+    ##print("Message sent, has id",songlist.messageId)
     return
 async def search(message):
     """
@@ -323,7 +352,7 @@ async def search(message):
     special characters like Ego,Embryo, and maybe beta by yooh.
     """
     parameters = await sanitize(message.content)
-    print(parameters)
+    #print(parameters)
     parameters = ('%'+parameters+'%','%'+parameters+'%')
     #Database parameters
     with sqlite3.connect('sdvx.db') as db:
@@ -334,7 +363,7 @@ async def search(message):
         cursor.execute(query,parameters)
         results = cursor.fetchall()
     songsFound = len(results)
-    print(songsFound)
+    #print(songsFound)
     if songsFound == 1:
         await getSongInfo(results[0][0],results[0][2],message)
     elif songsFound >= 2:
@@ -368,7 +397,7 @@ async def searchdiff(message):
             return await message.channel.send('Invalid difficulty number: '+ str(difficultyNumber))
     #Catch if one of the three common levels are requested, present nothing for these
     if difficultyLevelExists:
-        if 'difficultyNumber' in searchParameters and difficultyLevel.group()[0] in ['n','a','e']:
+        if 'difficultyNumber' not in searchParameters and difficultyLevel.group()[0] in ['n','a','e']:
             return await message.channel.send('Difficulty number is required for this difficulty level.')
         searchParameters['difficultyLevel'] = config.reToDifficulty[difficultyLevel.group()[0]]
         jump = searchParameters['difficultyLevel']
@@ -385,7 +414,7 @@ async def searchdiff(message):
                 whereStatements += 'infinite_version' + " = '" + searchParameters[key] + "'"
             else:
                 whereStatements += key + " = '" + str(searchParameters[key]) + "'"
-        #print(whereStatements)
+        ##print(whereStatements)
         #Perform search on database joining the two
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
@@ -394,7 +423,7 @@ async def searchdiff(message):
                 WHERE """ + whereStatements
             cursor.execute(query)
             results = cursor.fetchall()
-            #print(results)
+            ##print(results)
         if len(results) == 1:
             await getSongInfo(results[0][0],results[0][2],message)
         elif len(results) > 1:
@@ -406,8 +435,8 @@ async def random(message):
     """Return a random song in the database, or return a random song which falls
     within the difficulty number specified within the command"""
     arg = await sanitize(message.content)
-    print('random command used')
-    print(arg)
+    #print('random command used')
+    #print(arg)
     if len(arg) == 0:
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
@@ -415,16 +444,17 @@ async def random(message):
             query = cursor.fetchone()
         await getSongInfo(query[0],query[1],message)
         return
-    print(arg)
+    #print(arg)
     if arg.isdigit() and int(arg) >= 1 and int(arg) <= 20:
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
             cursor.execute("SELECT title_name,songs.id FROM songs JOIN difficulties ON songs.id = difficulties.id WHERE difficultyNumber = ? AND illustrator != 'dummy' ORDER BY random() LIMIT 1",(int(arg),))
             query = cursor.fetchone()
         return await getSongInfo(query[0],query[1],message)
+    #See if there is a lower and upper bound
     elif len(arg.split('-')) == 2:
         arg = arg.split('-')
-        print(arg)
+        #print(arg)
 
         #Sanitize and check the values for the search
         for index,bound in enumerate(arg):
@@ -438,7 +468,7 @@ async def random(message):
         if arg[0] > arg[1]:
             arg = [arg[1],arg[0]]
         #Perform random search
-        print(arg)
+        #print(arg)
         with sqlite3.connect('sdvx.db') as db:
             cursor = db.cursor()
             cursor.execute("SELECT title_name,songs.id FROM songs JOIN difficulties ON songs.id = difficulties.id WHERE difficultyNumber >= ? AND difficultyNumber <= ? AND illustrator != 'dummy' ORDER BY random() LIMIT 1",(arg[0],arg[1]))
@@ -448,3 +478,15 @@ async def random(message):
         return await message.channel.send('Usage: *random <1-20> or *random lowerLevel-UpperLevel')
 
 
+async def help(message):
+    embed = discord.Embed(title='**Bemani Bot Commands**',description="You asked for help, so I'm here!",color=0x111111)
+    #thumbnail = 'https://pbs.twimg.com/profile_images/1144135580948631552/YFph2-V6_400x400.jpg'
+    #print(thumbnail)
+    #embed.set_thumbnail(url=thumbnail)
+    embed.add_field(name='**Suggestions**',value="If you have suggestions, please ask! I've run out of what else to do with this bot!",inline=True)
+    embed.add_field(name='**Commands**',value='''
+    ```<*ss|*search|*songsearch> [Song Name] \n\t[Search for a song using title name (or artist).]\n<*sd|*searchdiff> [Difficulty and/or Number] \n\t[Use level and/or number (ex: exh 18) to find a song.]\n<*random> [lowerNumber - upperNumber]\n\t[Provides a random song for you to play!]\n*help: \n\tYou're already here!```
+    ''',inline=False)
+    embed.set_footer(text='Created by Scarlex | Source Code: https://github.com/Scarlex-git/BemaniBot',
+                    icon_url='https://pbs.twimg.com/profile_images/1144135580948631552/YFph2-V6_400x400.jpg')
+    return await message.channel.send(embed=embed)

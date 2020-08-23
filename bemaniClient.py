@@ -14,11 +14,12 @@ commands = {
     'searchdiff':soundvoltex.searchdiff,
     'sd':soundvoltex.searchdiff,
     'random':soundvoltex.random,
+    'help':soundvoltex.help
     }
 
 
 async def handleReactions(payload):
-    channel = client.get_channel(payload.channel_id)
+    #channel = client.get_channel(payload.channel_id)
     channelId = payload.channel_id
     guildId = payload.guild_id
     #message = await channel.fetch_message(payload.message_id)
@@ -29,9 +30,9 @@ async def handleReactions(payload):
         #print('passing through reaction')
         return
     emoji = str(payload.emoji)
-    print(emoji)
+    #print(emoji)
     #Check what type of embed it is: either a song search or single song
-    print(config.serverSongQueue)
+    #print(config.serverSongQueue)
     if guildId in config.serverSongQueue and channelId in config.serverSongQueue[guildId]:
         for songObject in config.serverSongQueue[guildId][channelId]:
             if songObject.messageId == payload.message_id:
@@ -41,10 +42,10 @@ async def handleReactions(payload):
                 elif isinstance(songObject,soundvoltex.SongSearch) and emoji in config.pageChangeDictionary:
                     await songObject.changePage(config.pageChangeDictionary[emoji])
     #Assume that the embed is just a song then
-    else:
-        print(str(payload.emoji))
+    #else:
+        #print(str(payload.emoji))
         #print('Invalid object to react to')
-        await channel.send(str(payload.emoji) + ' received')
+        #await channel.send(str(payload.emoji) + ' received')
     return
 @client.event
 async def on_message(message):
@@ -64,25 +65,27 @@ async def on_message(message):
         #Handle page navigation or turn a songlist into a singlesong
         content = message.content
         #Check the number first because there's no point going farther 
-        pageNumberRequested = isinstance(config.pageParser.match(content),re.Match)
         number = config.numberParser.match(content)
-        if pageNumberRequested:
-            number = config.numberParser.search(content)
+        """Optional page number jump, probably not needed"""
+        #pageNumberRequested = isinstance(config.pageParser.match(content),re.Match)
+        #if pageNumberRequested:
+        #    number = config.numberParser.search(content)
         print(config.serverSongQueue)
         if isinstance(number,re.Match):
             number = int(number.group())
             #See if the user is requesting a page
             for index,songObject in enumerate(config.serverSongQueue[message.guild.id][message.channel.id]):
                 if isinstance(songObject,soundvoltex.SongSearch): 
-                    if pageNumberRequested:
-                        await songObject.setPage(number)
-                    else:
-                        #Transform the songsearch into a single song
-                        print('attempting to convert',config.serverSongQueue[message.guild.id][message.channel.id][index],'to single song')
-                        #print(config.serverSongQueue)
-                        config.serverSongQueue[message.guild.id][message.channel.id][index] = await songObject.convertToSingleSong(number)
-                        await config.serverSongQueue[message.guild.id][message.channel.id][index].startCountdown(10)
-                        #print(config.serverSongQueue)
+                    #if pageNumberRequested:
+                    #    await songObject.setPage(number)
+                    #else:
+                    #Transform the songsearch into a single song
+                    itemBeingConverted = config.serverSongQueue[message.guild.id][message.channel.id][index]
+                    print('attempting to convert',itemBeingConverted,'to single song')
+                    #print(config.serverSongQueue)
+                    itemBeingConverted = await songObject.convertToSingleSong(number)
+                    await itemBeingConverted.startCountdown(len(itemBeingConverted))
+                    #print(config.serverSongQueue)
 
             #See what number they request with the page (or the song number)
     return
