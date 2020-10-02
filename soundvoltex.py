@@ -169,7 +169,7 @@ class SingleSong():
         string = 'SingleSong ID: '+str(self.messageId)
         return string
     def __len__(self):
-        return 10*len(self.difficulties)
+        return 20
     async def createSongMessage(self,channel):
         """Creates the message and allows the song to have a message to handle itself"""
         embed = await self.generateEmbed()
@@ -281,7 +281,7 @@ class SingleSong():
             config.serverSongQueue[self.guildId][self.channelId].remove(self)
         except:
             pass
-        #print(config.serverSongQueue[self.guildId])
+        print(config.serverSongQueue[self.guildId])
             
 
 
@@ -483,9 +483,9 @@ async def help(message):
     #thumbnail = 'https://pbs.twimg.com/profile_images/1144135580948631552/YFph2-V6_400x400.jpg'
     #print(thumbnail)
     #embed.set_thumbnail(url=thumbnail)
-    embed.add_field(name='**Suggestions**',value="If you have suggestions, please ask! I've run out of what else to do with this bot!",inline=True)
-    embed.add_field(name='**Commands**',value='''
-    ```<*ss|*search|*songsearch> [Song Name] \n\t[Search for a song using title name (or artist).]\n<*sd|*searchdiff> [Difficulty and/or Number] \n\t[Use level and/or number (ex: exh 18) to find a song.]\n<*random> [lowerNumber - upperNumber]\n\t[Provides a random song for you to play!]\n*help: \n\tYou're already here!```
+    embed.add_field(name='Suggestions',value="If you have suggestions, please ask! I've run out of what else to do with this bot!",inline=True)
+    embed.add_field(name='Commands',value='''
+    ```<*ss | *search | *songsearch> [Song Name] \n\t(Search for a song using title name (or artist).)\n<*sd | *searchdiff> [Difficulty and/or Number] \n\t(Use level and/or number (ex: exh 18) to find a song.)\n<*random> [lowerNumber - upperNumber]\n\t(Provides a random song for you to play!)\n<*help>: \n\tYou're already here!```
     ''',inline=False)
     embed.set_footer(text='Created by Scarlex | Source Code: https://github.com/Scarlex-git/BemaniBot',
                     icon_url='https://pbs.twimg.com/profile_images/1144135580948631552/YFph2-V6_400x400.jpg')
